@@ -33,15 +33,22 @@ class Model(object, metaclass=Base):
             setattr(self, key, value)
         super(Model, self).__init__()
         self.filter_values = self.fields
+        self.sql = ''
+        self._q = None
 
     def create(self):
+        create_fields = []
+        create_values = []
+        for field_name in self.fields:
+            value = getattr(self, field_name, None)
+            if value:
+                key = field_name
+                create_fields.append(key)
+                create_values.append(value)
         sql = INSERT.format(table_name=self.__table__,
-                            fields='({fields})'.format(fields=','.join([self._fields_map.get(field) for field in self.fields])),
-                            values=str(tuple([getattr(self, field_name) for field_name in self.fields])))
-        with self.q as query:
-            print(sql)
-            query.execute(sql)
-            # query.close()
+                            fields=','.join(create_fields),
+                            values=str(tuple(create_values)))
+        self.sql += sql
         return self
 
     def delete(self):
@@ -56,37 +63,52 @@ class Model(object, metaclass=Base):
     def filter(self, **kwargs):
         filter_conditions = ''
         for k, v in kwargs.items():
+            print(k)
             filter_conditions += ' ' + self._fields_map.get(k) + '=' + str(v)
         values = ','.join([self._fields_map.get(value) for value in self.filter_values])
         sql = SELECT.format(fields=values, table_name=self.__table__, filter_conditions=filter_conditions)
-        with self.q as query:
-            print(sql)
-            result = list()
-            res = query.execute(sql)
-            if res:
-                for sql_return in query.fetchall():
-                    obj = self.__class__()
-                    for idx, sql_res in enumerate(sql_return):
-                        setattr(obj, self.filter_values[idx-1], sql_res)
-                    result.append(obj)
-                return result
-            else:
-                raise Exception('不知道数据库查询出了个啥错，反正出错了。')
+        self.sql += sql
+        return self
 
     def values(self, *args):
         self.filter_values = list(args)
         return self
 
+    def first(self):
+        self.sql += ' LIMIT 1'
+        return self
+
+    def execute(self):
+        with self._q as query:
+            print(self.sql)
+            result = list()
+            exec_res = query.execute(self.sql)
+            return_result = query.fetchall()
+            if exec_res and isinstance(return_result, tuple):
+                for single_return in return_result:
+                    obj = self.__class__()
+                    for idx, sql_res in enumerate(single_return):
+                        setattr(obj, self.filter_values[idx], sql_res)
+                    result.append(obj)
+                return result
+            else:
+                return exec_res
+
 
 class Person(Model):
-    __table__ = 'Persons'
-    id = IntegerField('Id_P')
-    last_name = StringField('LastName')
-    first_name = StringField('FirstName')
-    address = StringField('Address')
-    city = StringField('City')
+    __table__ = 'person'
+    id = IntegerField('id')
+    last_name = StringField('last_name')
+    first_name = StringField('first_name')
+    address = StringField('address')
+    city = StringField('city')
 
 
-p = Person().values('last_name', 'first_name').filter(id=1)
-print(p)
-print(p[0].last_name)
+p = Person().filter(first_name='杨').first().execute()
+print(p[0].first_name)
+
+# p = Person(last_name='迅', first_name='杨', address='河南省商丘市睢县尚屯镇杨庄村', city='睢县')
+# p.create()
+# res = p.execute()
+# p.create()
+

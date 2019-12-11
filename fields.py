@@ -10,11 +10,15 @@ class Field(object):
 
 class StringField(Field):
 
+    _type = str
+
     def __init__(self, name):
         super(StringField, self).__init__(name, 'varchar(100)')
 
 
 class IntegerField(Field):
+
+    _type = int
 
     def __init__(self, name):
         super(IntegerField, self).__init__(name, 'int')
