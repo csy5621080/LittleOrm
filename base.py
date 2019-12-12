@@ -51,3 +51,6 @@ class Person(Model):
 pp = Person.query.filter(first_name='杨').first().execute()
 print(pp[0].id)
 
+ppp = Person.query.filter(first_name='杨').first().execute()
+print(ppp[0].id)
+

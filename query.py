@@ -1,11 +1,11 @@
 from sql import SIGN_MAP, INSERT, SELECT
-from engine.mysql_engine import cursor
+from engine.mysql_engine import connection
 
 
 class Query(object):
 
     def __init__(self, model_class):
-        self.q = cursor()
+        self.conn = connection
         self.model = model_class
         self.filter_values = self.model.fields
         self.sql = ''
@@ -74,17 +74,22 @@ class Query(object):
         return self
 
     def execute(self):
-        with self.q as query:
+        with self.conn() as conn:
             print(self.sql)
-            result = list()
-            exec_res = query.execute(self.sql)
-            return_result = query.fetchall()
+            cursor = conn.cursor()
+            exec_res = cursor.execute(self.sql)
+            return_result = cursor.fetchall()
             if exec_res and isinstance(return_result, tuple):
+                result = list()
                 for single_return in return_result:
                     obj = self.model()
                     for idx, sql_res in enumerate(single_return):
                         setattr(obj, self.filter_values[idx], sql_res)
                     result.append(obj)
-                return result
             else:
-                return exec_res
+                result = exec_res
+            self.query_clear()
+            return result
+
+    def query_clear(self):
+        setattr(self, 'sql', '')

@@ -1,19 +1,22 @@
 import pymysql
+from DBUtils.PersistentDB import PersistentDB
 from contextlib import contextmanager
 import traceback
 
+db_config = dict(host='127.0.0.1', port=3306, user='root', password='123', database='orm_test')
 
-def get_connection(host='127.0.0.1', port=3306, user='root', password='123', database='orm_test'):
-    connection = pymysql.connect(host=host, port=port, user=user, password=password, database=database, charset='utf8')
-    return connection
+poolDB = PersistentDB(
+            creator=pymysql,
+            maxusage=1000,
+            **db_config
+        )
 
 
 @contextmanager
-def cursor():
-    con = get_connection()
-    cursor = con.cursor()
+def connection():
+    con = poolDB.connection()
     try:
-        yield cursor
+        yield con
         con.commit()
     except Exception as e:
         con.rollback()
