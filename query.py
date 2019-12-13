@@ -104,6 +104,7 @@ class Query(object):
             else:
                 result = exec_res
             self.query_clear()
+            cursor.close()
             return result
 
     def query_clear(self):

@@ -48,3 +48,14 @@ class Person(Model):
     first_name = StringField(length=255)
     address = StringField(length=255)
     city = StringField(length=255)
+
+
+# print(Person)
+q = Person.query
+query_result = q.filter(id=1).first().execute()
+print(q)
+print(query_result.one().last_name)
+q = Person.query
+query_result = q.filter(id=2).first().execute()
+print(q)
+print(query_result.one().last_name)
