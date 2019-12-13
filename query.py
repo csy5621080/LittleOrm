@@ -1,8 +1,14 @@
-from sql import SIGN_MAP, INSERT, SELECT
+from sql import SIGN_MAP, INSERT, SELECT, UPDATE
 from engine.mysql_engine import connection
 
 
 class Query(object):
+
+    class QueryType(object):
+
+        __select__ = SELECT
+        __insert__ = INSERT
+        __update__ = UPDATE
 
     def __init__(self, model_class):
         self.conn = connection
@@ -11,6 +17,15 @@ class Query(object):
         self.sql = ''
         self.model_fields = getattr(self.model, '_fields')
         self.model_fields_map = getattr(self.model, '_fields_map')
+        self.query_type = self.QueryType.__select__
+        self.filter_conditions = dict()
+        self.order_conditions = dict()
+        self.limits = tuple()
+
+        self.create_values = []
+        self.create_fields = []
+
+        self.updater = dict()
 
     @staticmethod
     def get_sign(filter_key):
@@ -31,40 +46,30 @@ class Query(object):
             return field_value
 
     def create(self):
-        create_fields = []
-        create_values = []
+        self.query_type = self.QueryType.__insert__
         for field_name in self.model.fields:
             value = getattr(self.model, field_name, None)
             if value:
                 key = field_name
-                create_fields.append(key)
-                create_values.append(value)
-        sql = INSERT.format(table_name=self.model.__table__,
-                            fields=','.join(create_fields),
-                            values=str(tuple(create_values)))
-        self.sql += sql
+                self.create_fields.append(key)
+                self.create_values.append(value)
         return self
 
     def filter(self, **kwargs):
-        filter_conditions = ''
-        for k, v in kwargs.items():
-            _sign, field_name = self.get_sign(k)
-            v = self.fields_handle(field_name, v)
-            filter_conditions += ' ' + self.model_fields_map.get(k) + _sign + str(v)
-        values = ','.join([self.model_fields_map.get(value) for value in self.filter_values])
-        sql = SELECT.format(fields=values, table_name=self.model.__table__, filter_conditions=filter_conditions)
-        self.sql += sql
+        self.filter_conditions.update(**kwargs)
         return self
 
     def first(self):
-        self.sql += ' LIMIT 1'
+        self.limits = (1, )
         return self
 
     def delete(self):
         pass
 
-    def update(self):
-        pass
+    def update(self, **kwargs):
+        self.query_type = self.QueryType.__update__
+        self.updater.update(**kwargs)
+        return self
 
     def get(self):
         pass
@@ -74,6 +79,7 @@ class Query(object):
         return self
 
     def execute(self):
+        self.handle_query()
         with self.conn() as conn:
             print(self.sql)
             cursor = conn.cursor()
@@ -93,3 +99,55 @@ class Query(object):
 
     def query_clear(self):
         setattr(self, 'sql', '')
+        setattr(self, 'filter_conditions', {})
+        setattr(self, 'order_conditions', {})
+        setattr(self, 'limits', ())
+        setattr(self, 'create_fields', [])
+        setattr(self, 'create_values', [])
+        setattr(self, 'updater', {})
+        setattr(self, 'query_type', self.QueryType.__select__)
+
+    def handle_query(self):
+        if self.query_type == self.QueryType.__select__:
+            if self.filter_conditions:
+                filter_conditions = ''
+                for k, v in self.filter_conditions.items():
+                    _sign, field_name = self.get_sign(k)
+                    v = self.fields_handle(field_name, v)
+                    if filter_conditions:
+                        filter_conditions += ' and ' + self.model_fields_map.get(k) + _sign + str(v)
+                    else:
+                        filter_conditions += self.model_fields_map.get(k) + _sign + str(v)
+                values = ','.join([self.model_fields_map.get(value) for value in self.filter_values])
+                sql = self.query_type.format(fields=values, table_name=self.model.__table__,
+                                             filter_conditions=filter_conditions)
+                self.sql += sql
+            if len(self.limits) == 1:
+                self.sql += ' LIMIT {limits}'.format(limits=str(self.limits[0]))
+            elif len(self.limits) == 2:
+                self.sql += ' LIMIT {limits}'.format(limits=str(self.limits[0]) + ', ' + str(self.limits[1]))
+        elif self.query_type == self.QueryType.__insert__:
+            sql = self.query_type.format(table_name=self.model.__table__,
+                                         fields=','.join(self.create_fields),
+                                         values=str(tuple(self.create_values)))
+            self.sql += sql
+        elif self.query_type == self.QueryType.__update__:
+            updaters = []
+            for updater_k, updater_v in self.updater.items():
+                single_updater = updater_k + '=' + self.fields_handle(updater_k, updater_v)
+                updaters.append(single_updater)
+            update_conditions = ','.join(updaters)
+
+            filter_conditions = ''
+            for k, v in self.filter_conditions.items():
+                _sign, field_name = self.get_sign(k)
+                v = self.fields_handle(field_name, v)
+                if filter_conditions:
+                    filter_conditions += ' and ' + self.model_fields_map.get(k) + _sign + str(v)
+                else:
+                    filter_conditions += self.model_fields_map.get(k) + _sign + str(v)
+
+            sql = self.query_type.format(table_name=self.model.__table__, update_conditions=update_conditions,
+                                         filter_conditions=filter_conditions)
+            self.sql = sql
+

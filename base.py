@@ -22,11 +22,9 @@ class Base(type):
         attributes.update({'__table__': attrs.get('__table__', class_name)})
         attributes.update({'_fields_map': _fields_map})
         new_ = type.__new__(cls, class_name, bases, attributes)
+        # 元类可直接调用子类的方法
         new_.set_query(attrs.get('__query_class__', Query))
         return new_
-
-    def set_query(cls, query_class: type):
-        setattr(cls, 'query', query_class(cls))
 
 
 class Model(object, metaclass=Base):
@@ -36,21 +34,26 @@ class Model(object, metaclass=Base):
             setattr(self, key, value)
         super(Model, self).__init__()
 
+    @classmethod
+    def set_query(cls, query_class: type):
+        setattr(cls, 'query', query_class(cls))
+
 
 class Person(Model):
 
     __table__ = 'person'
 
     id = AutoPrimaryField(length=11)
-    last_name = StringField(length=255, )
+    last_name = StringField(length=255)
     first_name = StringField(length=255)
     address = StringField(length=255)
     city = StringField(length=255)
 
 
-pp = Person.query.filter(first_name='杨').first().execute()
-print(pp[0].id)
+# p = Person.query.filter(id=1).update(last_name='会敏')
+# print(p)
+Person.query.filter(id=1).update(last_name='会敏').execute()
 
-ppp = Person.query.filter(first_name='杨').first().execute()
-print(ppp[0].id)
+p = Person.query.filter(id=1).execute()
 
+print(p[0].last_name)
