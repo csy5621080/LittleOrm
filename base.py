@@ -50,10 +50,22 @@ class Person(Model):
     city = StringField(length=255)
 
 
-# p = Person.query.filter(id=1).update(last_name='会敏')
+# pp = Person.query.filter(id=1).execute()
+#
+#
+# ppp = Person.query.filter(id=2).execute()
+#
+# print(pp)
+# print(ppp)
+# print(pp.one())
+# print(ppp.one())
+# print(pp.one().id)
+# print(ppp.one().id)
+
+# p = Person
+# pa = p.query.create(last_name='婉蓉', first_name='赖', address='北京市海淀区上地某嘎达', city='江西省某嘎达市').execute()
 # print(p)
-Person.query.filter(id=1).update(last_name='会敏').execute()
+# print(pa)
 
-p = Person.query.filter(id=1).execute()
-
-print(p[0].last_name)
+ppp = Person.query.filter(id__IN=(9, 11)).delete().execute()
+print(ppp)

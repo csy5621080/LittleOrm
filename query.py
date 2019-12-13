@@ -1,4 +1,4 @@
-from sql import SIGN_MAP, INSERT, SELECT, UPDATE
+from sql import SIGN_MAP, INSERT, SELECT, UPDATE, DELETE
 from engine.mysql_engine import connection
 
 
@@ -9,6 +9,7 @@ class Query(object):
         __select__ = SELECT
         __insert__ = INSERT
         __update__ = UPDATE
+        __delete__ = DELETE
 
     def __init__(self, model_class):
         self.conn = connection
@@ -33,22 +34,28 @@ class Query(object):
         field_name = filter_key
         if '__' in filter_key:
             field_ = str(filter_key).split('__')
-            sign_str = field_[-1:]
+            sign_str = field_[-1]
             sign = SIGN_MAP.get(sign_str)
-            field_name = field_[:-1]
+            field_name = '__'.join(field_[:-1])
         return sign, field_name
 
     def fields_handle(self, field_name, field_value):
         field_model = self.model_fields.get(field_name)
         if field_model.__value_type__ is str:
-            return """ '{}' """.format(field_value)
+            if isinstance(field_value, list) or isinstance(field_value, tuple):
+                field_value = [""" '{}' """.format(field_v) for field_v in field_value]
+                return tuple(field_value)
+            else:
+                return """ '{}' """.format(str(field_value))
         elif field_model.__value_type__ is int:
+            if isinstance(field_value, list):
+                field_value = tuple(field_value)
             return field_value
 
-    def create(self):
+    def create(self, **kwargs):
         self.query_type = self.QueryType.__insert__
         for field_name in self.model.fields:
-            value = getattr(self.model, field_name, None)
+            value = kwargs.get(field_name, None)
             if value:
                 key = field_name
                 self.create_fields.append(key)
@@ -64,7 +71,8 @@ class Query(object):
         return self
 
     def delete(self):
-        pass
+        self.query_type = self.QueryType.__delete__
+        return self
 
     def update(self, **kwargs):
         self.query_type = self.QueryType.__update__
@@ -85,12 +93,13 @@ class Query(object):
             cursor = conn.cursor()
             exec_res = cursor.execute(self.sql)
             return_result = cursor.fetchall()
-            if exec_res and isinstance(return_result, tuple):
-                result = list()
+            if exec_res and return_result and isinstance(return_result, tuple):
+                result = ArrayQueryResult()
                 for single_return in return_result:
-                    obj = self.model()
+                    obj = SingleQueryResult()
                     for idx, sql_res in enumerate(single_return):
                         setattr(obj, self.filter_values[idx], sql_res)
+                    obj.model = self.model
                     result.append(obj)
             else:
                 result = exec_res
@@ -115,10 +124,14 @@ class Query(object):
                     _sign, field_name = self.get_sign(k)
                     v = self.fields_handle(field_name, v)
                     if filter_conditions:
-                        filter_conditions += ' and ' + self.model_fields_map.get(k) + _sign + str(v)
+                        filter_conditions += ' and ' + self.model_fields_map.get(field_name) + _sign + str(v)
                     else:
-                        filter_conditions += self.model_fields_map.get(k) + _sign + str(v)
+                        filter_conditions += self.model_fields_map.get(field_name) + _sign + str(v)
                 values = ','.join([self.model_fields_map.get(value) for value in self.filter_values])
+
+                if filter_conditions:
+                    filter_conditions = ' WHERE ' + filter_conditions
+
                 sql = self.query_type.format(fields=values, table_name=self.model.__table__,
                                              filter_conditions=filter_conditions)
                 self.sql += sql
@@ -143,11 +156,53 @@ class Query(object):
                 _sign, field_name = self.get_sign(k)
                 v = self.fields_handle(field_name, v)
                 if filter_conditions:
-                    filter_conditions += ' and ' + self.model_fields_map.get(k) + _sign + str(v)
+                    filter_conditions += ' and ' + self.model_fields_map.get(field_name) + _sign + str(v)
                 else:
-                    filter_conditions += self.model_fields_map.get(k) + _sign + str(v)
+                    filter_conditions += self.model_fields_map.get(field_name) + _sign + str(v)
+
+            if filter_conditions:
+                filter_conditions = ' WHERE ' + filter_conditions
 
             sql = self.query_type.format(table_name=self.model.__table__, update_conditions=update_conditions,
                                          filter_conditions=filter_conditions)
             self.sql = sql
+        elif self.query_type == self.QueryType.__delete__:
+            filter_conditions = ''
+            for k, v in self.filter_conditions.items():
+                _sign, field_name = self.get_sign(k)
+                v = self.fields_handle(field_name, v)
+                if filter_conditions:
+                    filter_conditions += ' and ' + self.model_fields_map.get(field_name) + _sign + str(v)
+                else:
+                    filter_conditions += self.model_fields_map.get(field_name) + _sign + str(v)
+
+            if filter_conditions:
+                filter_conditions = ' WHERE ' + filter_conditions
+
+            sql = self.query_type.format(table_name=self.model.__table__, filter_conditions=filter_conditions)
+            self.sql = sql
+
+
+class SingleQueryResult(object):
+
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+    def __str__(self):
+        return '<query.SingleQueryResult object at {pk}>'.format(pk=str(id(self)))
+
+
+class ArrayQueryResult(list):
+
+    def __init__(self):
+        super(ArrayQueryResult, self).__init__()
+
+    def __str__(self):
+        return '<query.ArrayQueryResult object at {pk}>'.format(pk=str(id(self)))
+
+    def one(self):
+        if len(self):
+            return self[0]
+        return None
 
