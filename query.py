@@ -19,8 +19,8 @@ class Query(object):
         self.model_fields = getattr(self.model, '_fields')
         self.model_fields_map = getattr(self.model, '_fields_map')
         self.query_type = self.QueryType.__select__
-        self.filter_conditions = dict()
-        self.order_conditions = dict()
+        self.filter_conditions = {}
+        self.order_conditions = {}
         self.limits = tuple()
 
         self.create_values = []
@@ -107,14 +107,8 @@ class Query(object):
             return result
 
     def query_clear(self):
-        setattr(self, 'sql', '')
-        setattr(self, 'filter_conditions', {})
-        setattr(self, 'order_conditions', {})
-        setattr(self, 'limits', ())
-        setattr(self, 'create_fields', [])
-        setattr(self, 'create_values', [])
-        setattr(self, 'updater', {})
-        setattr(self, 'query_type', self.QueryType.__select__)
+        # 此处重置模型内的query对象为一个新的对象
+        setattr(self.model, 'query', Query(self.model))
 
     def handle_query(self):
         if self.query_type == self.QueryType.__select__:
