@@ -50,6 +50,8 @@ class Query(object):
         elif field_model.__value_type__ is int:
             if isinstance(field_value, list):
                 field_value = tuple(field_value)
+            elif isinstance(field_value, int):
+                field_value = str(field_value)
             return field_value
 
     def create(self, **kwargs):
@@ -183,6 +185,15 @@ class SingleQueryResult(object):
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+    def instance(self, **kwargs):
+        instance = self.model
+        iter_instance = self.__dict__
+        iter_instance.pop('model')
+        iter_instance.update(kwargs)
+        for key, value in iter_instance.items():
+            setattr(instance, key, value)
+        return instance
 
     def __str__(self):
         return '<query.SingleQueryResult object at {pk}>'.format(pk=str(id(self)))
