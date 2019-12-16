@@ -21,9 +21,10 @@ class Base(type):
         attributes.update({'_fields': _fields})
         attributes.update({'__table__': attrs.get('__table__', class_name)})
         attributes.update({'_fields_map': _fields_map})
+        # attributes.update({'query': Query(cls)})
         new_ = type.__new__(cls, class_name, bases, attributes)
         # 元类可直接调用子类的方法
-        new_.set_query(attrs.get('__query_class__', Query))
+        # new_.set_query(attrs.get('__query_class__', Query))
         return new_
 
 
@@ -32,11 +33,8 @@ class Model(object, metaclass=Base):
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
             setattr(self, key, value)
+        self.query = Query(self)
         super(Model, self).__init__()
-
-    @classmethod
-    def set_query(cls, query_class: type):
-        setattr(cls, 'query', query_class(cls))
 
 
 class Person(Model):
@@ -48,14 +46,3 @@ class Person(Model):
     first_name = StringField(length=255)
     address = StringField(length=255)
     city = StringField(length=255)
-
-
-# print(Person)
-q = Person.query
-query_result = q.filter(id=1).first().execute()
-print(q)
-print(query_result.one().last_name)
-q = Person.query
-query_result = q.filter(id=2).first().execute()
-print(q)
-print(query_result.one().last_name)
