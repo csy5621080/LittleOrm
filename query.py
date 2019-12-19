@@ -177,9 +177,10 @@ class SingleQueryResult(object):
     def instance(self, **kwargs):
         instance = self.model
         iter_instance = self.__dict__
-        iter_instance.pop('model')
-        iter_instance.update(kwargs)
-        for key, value in iter_instance.items():
+        copy_instance = iter_instance.copy()
+        copy_instance.pop('model')
+        copy_instance.update(kwargs)
+        for key, value in copy_instance.items():
             setattr(instance, key, value)
         return instance
 
