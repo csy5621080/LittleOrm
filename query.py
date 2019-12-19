@@ -12,6 +12,21 @@ class Query(object):
         __delete__ = DELETE
 
     def __init__(self, model_class):
+        """
+            conn: 连接池链接.
+            model: 模型对象. obj: base.Model
+            filter_values: 查询的字段集合.如 “SELECT id, name FROM table” 语句中的id和name
+            sql: 生成的sql语句.
+            model_fields: 模型的字段对象集合.
+            model_fields_map: 模型字段名称映射.
+            query_type: C R U D类型
+            filter_conditions: 条件. 即 WHERE 语句的逻辑部分.
+            order_condition: 排序条件.
+            limit: 分页参数.
+            create_values: INSERT 语句的VALUES部分.
+            create_fields: INSERT 语句的字段部分.
+            updater: UPDATE 语句的SET 部分
+        """
         self.conn = connection
         self.model = model_class
         self.filter_values = self.model.fields
@@ -29,7 +44,7 @@ class Query(object):
         self.updater = dict()
 
     @staticmethod
-    def get_sign(filter_key):
+    def get_sign(filter_key: str) -> tuple:
         sign = '='
         field_name = filter_key
         if '__' in filter_key:
@@ -39,7 +54,7 @@ class Query(object):
             field_name = '__'.join(field_[:-1])
         return sign, field_name
 
-    def fields_handle(self, field_name, field_value):
+    def fields_handle(self, field_name: str, field_value: str) -> tuple or str:
         field_model = self.model_fields.get(field_name)
         if field_model.__value_type__ is str:
             if isinstance(field_value, list) or isinstance(field_value, tuple):
@@ -54,7 +69,7 @@ class Query(object):
                 field_value = str(field_value)
             return field_value
 
-    def create(self, **kwargs):
+    def create(self, **kwargs: dict) -> object:
         self.query_type = self.QueryType.__insert__
         for field_name in self.model.fields:
             value = kwargs.get(field_name, None)
@@ -64,19 +79,19 @@ class Query(object):
                 self.create_values.append(value)
         return self
 
-    def filter(self, **kwargs):
+    def filter(self, **kwargs: dict) -> object:
         self.filter_conditions.update(**kwargs)
         return self
 
-    def first(self):
+    def first(self) -> object:
         self.limits = (1, )
         return self
 
-    def delete(self):
+    def delete(self) -> object:
         self.query_type = self.QueryType.__delete__
         return self
 
-    def update(self, **kwargs):
+    def update(self, **kwargs: dict) -> object:
         self.query_type = self.QueryType.__update__
         self.updater.update(**kwargs)
         return self
@@ -84,11 +99,11 @@ class Query(object):
     def get(self):
         pass
 
-    def values(self, *args):
+    def values(self, *args: tuple or list) -> object:
         self.filter_values = list(args)
         return self
 
-    def execute(self):
+    def execute(self) -> int or list:
         self.handle_query()
         with self.conn() as conn:
             print(self.sql)
@@ -109,11 +124,11 @@ class Query(object):
             cursor.close()
             return result
 
-    def query_clear(self):
+    def query_clear(self) -> None:
         # 此处重置模型内的query对象为一个新的对象
         setattr(self.model, 'query', Query(self.model))
 
-    def get_condition(self):
+    def get_condition(self) -> str:
         filter_conditions = ''
         for k, v in self.filter_conditions.items():
             _sign, field_name = self.get_sign(k)
@@ -124,7 +139,7 @@ class Query(object):
                 filter_conditions += self.model_fields_map.get(field_name) + _sign + str(v)
         return filter_conditions
 
-    def handle_query(self):
+    def handle_query(self) -> str:
         if self.query_type == self.QueryType.__select__:
             if self.filter_conditions:
                 filter_conditions = self.get_condition()
@@ -174,15 +189,18 @@ class SingleQueryResult(object):
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-    def instance(self, **kwargs):
-        instance = self.model
-        iter_instance = self.__dict__
-        copy_instance = iter_instance.copy()
-        copy_instance.pop('model')
-        copy_instance.update(kwargs)
-        for key, value in copy_instance.items():
-            setattr(instance, key, value)
-        return instance
+    def instance(self, **kwargs: dict) -> object:
+        instance = getattr(self, 'model')
+        if instance:
+            iter_instance = self.__dict__
+            copy_instance = iter_instance.copy()
+            copy_instance.pop('model')
+            copy_instance.update(kwargs)
+            for key, value in copy_instance.items():
+                setattr(instance, key, value)
+            return instance
+        else:
+            raise Exception('SingleQueryResult object has no attribute <model>. 明白不！就是没有model这玩意. ')
 
     def __str__(self):
         return '<query.SingleQueryResult object at {pk}>'.format(pk=str(id(self)))

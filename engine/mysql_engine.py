@@ -3,8 +3,6 @@ from DBUtils.PooledDB import PooledDB
 from contextlib import contextmanager
 import traceback
 
-db_config = dict(host='127.0.0.1', port=3306, user='root', password='123', database='orm_test')
-
 poolDB = PooledDB(creator=pymysql,
                   mincached=10,
                   maxcached=10,
