@@ -113,17 +113,21 @@ class Query(object):
         # 此处重置模型内的query对象为一个新的对象
         setattr(self.model, 'query', Query(self.model))
 
+    def get_condition(self):
+        filter_conditions = ''
+        for k, v in self.filter_conditions.items():
+            _sign, field_name = self.get_sign(k)
+            v = self.fields_handle(field_name, v)
+            if filter_conditions:
+                filter_conditions += ' and ' + self.model_fields_map.get(field_name) + _sign + str(v)
+            else:
+                filter_conditions += self.model_fields_map.get(field_name) + _sign + str(v)
+        return filter_conditions
+
     def handle_query(self):
         if self.query_type == self.QueryType.__select__:
             if self.filter_conditions:
-                filter_conditions = ''
-                for k, v in self.filter_conditions.items():
-                    _sign, field_name = self.get_sign(k)
-                    v = self.fields_handle(field_name, v)
-                    if filter_conditions:
-                        filter_conditions += ' and ' + self.model_fields_map.get(field_name) + _sign + str(v)
-                    else:
-                        filter_conditions += self.model_fields_map.get(field_name) + _sign + str(v)
+                filter_conditions = self.get_condition()
                 values = ','.join([self.model_fields_map.get(value) for value in self.filter_values])
 
                 if filter_conditions:
@@ -147,16 +151,7 @@ class Query(object):
                 single_updater = updater_k + '=' + self.fields_handle(updater_k, updater_v)
                 updaters.append(single_updater)
             update_conditions = ','.join(updaters)
-
-            filter_conditions = ''
-            for k, v in self.filter_conditions.items():
-                _sign, field_name = self.get_sign(k)
-                v = self.fields_handle(field_name, v)
-                if filter_conditions:
-                    filter_conditions += ' and ' + self.model_fields_map.get(field_name) + _sign + str(v)
-                else:
-                    filter_conditions += self.model_fields_map.get(field_name) + _sign + str(v)
-
+            filter_conditions = self.get_condition()
             if filter_conditions:
                 filter_conditions = ' WHERE ' + filter_conditions
 
@@ -164,14 +159,7 @@ class Query(object):
                                          filter_conditions=filter_conditions)
             self.sql = sql
         elif self.query_type == self.QueryType.__delete__:
-            filter_conditions = ''
-            for k, v in self.filter_conditions.items():
-                _sign, field_name = self.get_sign(k)
-                v = self.fields_handle(field_name, v)
-                if filter_conditions:
-                    filter_conditions += ' and ' + self.model_fields_map.get(field_name) + _sign + str(v)
-                else:
-                    filter_conditions += self.model_fields_map.get(field_name) + _sign + str(v)
+            filter_conditions = self.get_condition()
 
             if filter_conditions:
                 filter_conditions = ' WHERE ' + filter_conditions
