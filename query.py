@@ -128,22 +128,27 @@ class Query(object):
         # 此处重置模型内的query对象为一个新的对象
         setattr(self.model, 'query', Query(self.model))
 
+    def join(self, another_model, join_conditions, join_direction=''):
+        pass
+
     def get_condition(self) -> str:
         filter_conditions = ''
         for k, v in self.filter_conditions.items():
             _sign, field_name = self.get_sign(k)
             v = self.fields_handle(field_name, v)
             if filter_conditions:
-                filter_conditions += ' and ' + self.model_fields_map.get(field_name) + _sign + str(v)
+                filter_conditions += ' and ' + self.model.__table__ + '.' + self.model_fields_map.get(field_name) + \
+                                     _sign + str(v)
             else:
-                filter_conditions += self.model_fields_map.get(field_name) + _sign + str(v)
+                filter_conditions += self.model.__table__ + '.' + self.model_fields_map.get(field_name) + _sign + str(v)
         return filter_conditions
 
     def handle_query(self) -> str:
         if self.query_type == self.QueryType.__select__:
             if self.filter_conditions:
                 filter_conditions = self.get_condition()
-                values = ','.join([self.model_fields_map.get(value) for value in self.filter_values])
+                values = ','.join([self.model.__table__ + '.' + self.model_fields_map.get(value)
+                                   for value in self.filter_values])
 
                 if filter_conditions:
                     filter_conditions = ' WHERE ' + filter_conditions
@@ -156,9 +161,15 @@ class Query(object):
             elif len(self.limits) == 2:
                 self.sql += ' LIMIT {limits}'.format(limits=str(self.limits[0]) + ', ' + str(self.limits[1]))
         elif self.query_type == self.QueryType.__insert__:
+            if self.create_values and len(self.create_values) > 1:
+                val = tuple(self.create_values)
+            elif len(self.create_values) == 1:
+                val = "('" + self.create_values[0] + "')"
+            else:
+                raise Exception('SQL校验失败. 创建语句的字段列表和值列表不可为空. ')
             sql = self.query_type.format(table_name=self.model.__table__,
                                          fields=','.join(self.create_fields),
-                                         values=str(tuple(self.create_values)))
+                                         values=str(val))
             self.sql += sql
         elif self.query_type == self.QueryType.__update__:
             updaters = []

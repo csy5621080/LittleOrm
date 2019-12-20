@@ -35,6 +35,9 @@ class Model(object, metaclass=Base):
             setattr(self, key, value)
         self.query = self.__query_class__(self)
         super(Model, self).__init__()
+        self.tables = [self.__table__]
+        self.join_conditions = {}
+        self.join_direction = ''
 
     def save(self):
         pk, pkv = self.pk()
@@ -48,6 +51,12 @@ class Model(object, metaclass=Base):
         else:
             result = self.query.create(**instance_dir).execute()
         return result
+
+    def join(self, another_model, join_condition={}, join_direction=''):
+        self.tables.append(another_model.__table__)
+        self.join_conditions = join_condition
+        self.join_direction = join_direction
+        return self
 
     def pk(self):
         pk_field = getattr(self, '__pk__', None)
@@ -65,3 +74,17 @@ class Person(Model):
     first_name = StringField(length=255)
     address = StringField(length=255)
     city = StringField(length=255)
+
+
+class Grade(Model):
+
+    __table__ = 'grade'
+
+    id = AutoPrimaryField(length=11)
+    name = StringField(length=255)
+
+
+p = Person().join(Grade, )
+print(p)
+q = p.query
+print(q)
