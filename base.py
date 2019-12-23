@@ -35,9 +35,10 @@ class Model(object, metaclass=Base):
             setattr(self, key, value)
         self.query = self.__query_class__(self)
         super(Model, self).__init__()
-        self.tables = [self.__table__]
-        self.join_conditions = {}
-        self.join_direction = ''
+        self.tables = OrderedDict()
+        self.tables.update({self.__class__.__name__: self.__table__})
+        self.join_conditions = []
+        self.join_direction = []
 
     def save(self):
         pk, pkv = self.pk()
@@ -52,10 +53,14 @@ class Model(object, metaclass=Base):
             result = self.query.create(**instance_dir).execute()
         return result
 
-    def join(self, another_model, join_condition={}, join_direction=''):
-        self.tables.append(another_model.__table__)
-        self.join_conditions = join_condition
-        self.join_direction = join_direction
+    def join(self, another_model, join_direction='left', **join_condition):
+        self.tables.update({another_model.__name__: another_model.__table__})
+        self.join_direction.append(join_direction)
+        if join_condition:
+            self.join_conditions.append(join_condition)
+        else:
+            self.join_conditions.append({})
+        self.query.other_filter_values[another_model.__table__] = another_model.fields
         return self
 
     def pk(self):
@@ -84,7 +89,11 @@ class Grade(Model):
     name = StringField(length=255)
 
 
-p = Person().join(Grade, )
-print(p)
-q = p.query
-print(q)
+# p = Person().join(Grade, 'left', Person_id='Grade_id')
+# print(p)
+# q = p.query
+# s = q.filter(id=1).execute()
+# print(s)
+
+pl = Person().query.filter(Person_id=1).execute()
+print(pl)

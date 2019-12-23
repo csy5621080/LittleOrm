@@ -1,4 +1,4 @@
-from sql import SIGN_MAP, INSERT, SELECT, UPDATE, DELETE
+from sql import SIGN_MAP, INSERT, SELECT, UPDATE, DELETE, JOIN
 from engine.mysql_engine import connection
 
 
@@ -10,6 +10,7 @@ class Query(object):
         __insert__ = INSERT
         __update__ = UPDATE
         __delete__ = DELETE
+        __join__ = JOIN
 
     def __init__(self, model_class):
         """
@@ -30,6 +31,7 @@ class Query(object):
         self.conn = connection
         self.model = model_class
         self.filter_values = self.model.fields
+        self.other_filter_values = {}
         self.sql = ''
         self.model_fields = getattr(self.model, '_fields')
         self.model_fields_map = getattr(self.model, '_fields_map')
@@ -42,32 +44,6 @@ class Query(object):
         self.create_fields = []
 
         self.updater = dict()
-
-    @staticmethod
-    def get_sign(filter_key: str) -> tuple:
-        sign = '='
-        field_name = filter_key
-        if '__' in filter_key:
-            field_ = str(filter_key).split('__')
-            sign_str = field_[-1]
-            sign = SIGN_MAP.get(sign_str)
-            field_name = '__'.join(field_[:-1])
-        return sign, field_name
-
-    def fields_handle(self, field_name: str, field_value: str) -> tuple or str:
-        field_model = self.model_fields.get(field_name)
-        if field_model.__value_type__ is str:
-            if isinstance(field_value, list) or isinstance(field_value, tuple):
-                field_value = [""" '{}' """.format(field_v) for field_v in field_value]
-                return tuple(field_value)
-            else:
-                return """ '{}' """.format(str(field_value))
-        elif field_model.__value_type__ is int:
-            if isinstance(field_value, list):
-                field_value = tuple(field_value)
-            elif isinstance(field_value, int):
-                field_value = str(field_value)
-            return field_value
 
     def create(self, **kwargs: dict) -> object:
         self.query_type = self.QueryType.__insert__
@@ -112,12 +88,15 @@ class Query(object):
             return_result = cursor.fetchall()
             if exec_res and return_result and isinstance(return_result, tuple):
                 result = ArrayQueryResult()
-                for single_return in return_result:
-                    obj = SingleQueryResult()
-                    for idx, sql_res in enumerate(single_return):
-                        setattr(obj, self.filter_values[idx], sql_res)
-                    obj.model = self.model
-                    result.append(obj)
+                if return_result and len(self.filter_values) >= len(return_result[0]):
+                    for single_return in return_result:
+                        obj = SingleQueryResult()
+                        for idx, sql_res in enumerate(single_return):
+                            setattr(obj, self.filter_values[idx], sql_res)
+                        obj.model = self.model
+                        result.append(obj)
+                else:
+                    result = return_result
             else:
                 result = exec_res
             self.query_clear()
@@ -131,16 +110,53 @@ class Query(object):
     def join(self, another_model, join_conditions, join_direction=''):
         pass
 
+    @staticmethod
+    def get_sign(filter_key: str) -> tuple:
+        sign = '='
+        field_name = filter_key
+        if '__' in filter_key:
+            field_ = str(filter_key).split('__')
+            sign_str = field_[-1]
+            sign = SIGN_MAP.get(sign_str)
+            field_name = '__'.join(field_[:-1])
+        return sign, field_name
+
+    def fields_handle(self, field_name: str, field_value: str) -> tuple or str:
+        field_model = self.model_fields.get(field_name)
+        if field_model.__value_type__ is str:
+            if isinstance(field_value, list) or isinstance(field_value, tuple):
+                field_value = [""" '{}' """.format(field_v) for field_v in field_value]
+                return tuple(field_value)
+            else:
+                return """ '{}' """.format(str(field_value))
+        elif field_model.__value_type__ is int:
+            if isinstance(field_value, list):
+                field_value = tuple(field_value)
+            elif isinstance(field_value, int):
+                field_value = str(field_value)
+            return field_value
+
+    def check_model(self, field_name):
+        if '_' in field_name:
+            field_ = str(field_name).split('_')
+            if len(field_) > 1:
+                hypothesis_field = field_[-1]
+                hypothesis_model = '_'.join(field_[:-1])
+                if self.model.tables.get(hypothesis_model, None):
+                    return self.model.tables.get(hypothesis_model), hypothesis_field
+        return self.model.__table__, field_name
+
     def get_condition(self) -> str:
         filter_conditions = ''
         for k, v in self.filter_conditions.items():
             _sign, field_name = self.get_sign(k)
+            model_name, field_name = self.check_model(field_name)
             v = self.fields_handle(field_name, v)
             if filter_conditions:
-                filter_conditions += ' and ' + self.model.__table__ + '.' + self.model_fields_map.get(field_name) + \
+                filter_conditions += ' and ' + model_name + '.' + self.model_fields_map.get(field_name) + \
                                      _sign + str(v)
             else:
-                filter_conditions += self.model.__table__ + '.' + self.model_fields_map.get(field_name) + _sign + str(v)
+                filter_conditions += model_name + '.' + self.model_fields_map.get(field_name) + _sign + str(v)
         return filter_conditions
 
     def handle_query(self) -> str:
@@ -149,11 +165,29 @@ class Query(object):
                 filter_conditions = self.get_condition()
                 values = ','.join([self.model.__table__ + '.' + self.model_fields_map.get(value)
                                    for value in self.filter_values])
-
+                for tab, fields in self.other_filter_values.items():
+                    values += ',' + ','.join([tab + '.' + field for field in fields])
                 if filter_conditions:
                     filter_conditions = ' WHERE ' + filter_conditions
-
-                sql = self.query_type.format(fields=values, table_name=self.model.__table__,
+                table_name = self.model.__table__
+                if len(self.model.tables.items()) > 1:
+                    for idx, (mo, tab) in enumerate(list(self.model.tables.items())[1:]):
+                        join_conditions = ''
+                        for key, value in self.model.join_conditions[idx].items():
+                            sign, key = self.get_sign(key)
+                            k_model_name, k_field_name = self.check_model(key)
+                            if isinstance(value, str) and '_' in value:
+                                v_model_name, v_field_name = self.check_model(value)
+                                if self.model.tables.get(mo, None) and self.model.tables.get(mo, None) == v_model_name:
+                                    value = v_model_name + '.' + v_field_name
+                            join_conditions += k_model_name + '.' + k_field_name + sign + value
+                        if join_conditions:
+                            join_conditions = 'ON ' + join_conditions
+                        join_sql = self.QueryType().__join__.format(join_direction=self.model.join_direction[idx],
+                                                                    join_table_name=tab,
+                                                                    join_conditions=join_conditions)
+                        table_name += join_sql
+                sql = self.query_type.format(fields=values, table_name=table_name,
                                              filter_conditions=filter_conditions)
                 self.sql += sql
             if len(self.limits) == 1:
